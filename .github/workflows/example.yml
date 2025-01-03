@@ -67,8 +67,11 @@ jobs:
     needs: [metadata]
     if: ${{ always() && needs.metadata.result == 'success' }}
     runs-on: ubuntu-latest
-      
-  
+    steps:
+     - name: Do Nothing
+       run: |
+         echo "HI"
+    
   alert_rule_in_comment:
     name: Switch Labels for comment and alert actual status
     runs-on: ubuntu-latest
