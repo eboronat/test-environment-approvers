@@ -1,0 +1,13 @@
+name: Rule Submission
+description: Submit your rule.
+title: "Rule: [RULE-ID]"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please answer the following question
+
+  - type: input
+    id: rule_id
+    attributes:
+      label: What rule do you want to include?       
