@@ -1,0 +1,95 @@
+name: Example
+
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+
+permissions: {}
+
+jobs:
+  metadata:
+    name: Extract Inputs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      rule_id: ${{ steps.parse_issue.outputs.rule_id }}
+    steps:
+      - id: parse_issue
+        name: Parse rule from issue body
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          if rule_url=$(grep -oEm1 'https://example\.com/example\.[a-zA-Z0-9._-]+' <<< "${BODY}"); then
+            rule_id=$(cut -d'/' -f7 <<< "${rule_url}")
+          else
+            echo "FAILURE_MSG=Cannot extract a valid rule URL." >> $GITHUB_ENV
+            exit 1
+          fi
+          
+          {
+            echo "rule_id=${rule_id}"
+          } >> $GITHUB_OUTPUT
+          
+      - name: Report input extraction failure
+        if: ${{ failure() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const message = process.env.FAILURE_MSG || "Unexpected error retrieving inputs from the form. Please review that the form was properly fulfilled.";
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `:no_entry: ${message}`
+            })
+
+      - name: Notify start
+        if: ${{ success() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `process [has started](${ workflowUrl }).`
+            })
+
+
+  approve_rule_comment_mode:
+    name: Approve rule to comment mode
+    environment: commentMode
+    needs: [metadata]
+    if: ${{ always() && needs.metadata.result == 'success' }}
+    runs-on: ubuntu-latest
+      
+  
+  alert_rule_in_comment:
+    name: Switch Labels for comment and alert actual status
+    runs-on: ubuntu-latest
+    needs: [approve_rule_comment_mode]
+    if: ${{ always() && needs.approve_rule_comment_mode.result == 'success' }}
+    permissions:
+      issues: write
+    steps:
+      - name: Switch Labels and close issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Rule moved to Comment Mode. Findings will now be posted in the Pull Request conversations.`
+            })
+            github.rest.issues.update({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed'
+            })
